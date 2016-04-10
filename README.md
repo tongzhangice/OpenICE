@@ -1,5 +1,3 @@
-#OpenICE
-#===
 
 ![image](https://github.com/tongzhangice/OpenICE/blob/master/logo.png)
 
