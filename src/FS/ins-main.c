@@ -395,14 +395,25 @@ main(int argc, char *argv[])
 	 *  Momentum Equations.
 	 *
 	 * -------------------------------------------------------------------------------- */
-    int mask_iter = 0;
+    int mask_iter = 0, inverse_iter = 0;
     INT IF_CHANGE_MASK;
 
 #if 1
     while (TRUE)
     {
-        // iteration for ice shelf mask updating
+        // iteration for ice shelf mask updating and inversion
 
+    if ((inverse_iter % 2) == 0)
+
+        ns->set_dirichlet_bc = 0;
+        /* newton bc for the surface, i.e. normal simulation */
+
+    else
+        ns->set_dirichlet_bc = 1;
+        /* constrain the surface with obs. vel. for inversion */
+
+        
+    
     phgPrintf("----------------------------\n");
     phgPrintf("ice shelf mask iteration: %d\n", mask_iter);
     phgPrintf("----------------------------\n");
@@ -456,6 +467,12 @@ main(int argc, char *argv[])
 	    
 	    sayHello("Non linear solve begin");
 	    phgNSInitSolverU(ns);
+
+        if (inverse_iter < 1)
+            get_viscosity(ns);
+
+        /* initiate viscosity field at the beginning
+         * afterwards use the updated viscosity field */
 
 	    if (nonstep < newton_start)
 		ns->ltype = PICARD;
@@ -758,7 +775,9 @@ main(int argc, char *argv[])
 
     if (!(ns_params->another_run_with_updated_mask))
     {
+
         mask_iter = 1;
+
         phgPrintf("manually stops another run with updated mask!\n\n\n");
 
 
@@ -805,8 +824,34 @@ main(int argc, char *argv[])
     }
     }
 
+    get_strain_rate(ns);
 
-    if (mask_iter == 1)
+    if (ns->set_dirichlet_bc) {
+
+        //DOF *u_d = phgDofCopy(ns->u[1], NULL, DOF_P2, NULL);
+        DOF *eu_d = phgDofCopy(ns->strain_rate, NULL, DOF_P1, NULL);
+        ns->eu_d = eu_d;
+
+    }
+    else {
+
+        //DOF *u_n = phgDofCopy(ns->u[1], NULL, DOF_P2, NULL);
+        DOF *eu_n = phgDofCopy(ns->strain_rate, NULL, DOF_P1, NULL);
+        ns->eu_n = eu_n;
+
+    }
+
+
+    DOF *visc_old = phgDofCopy(ns->viscosity, NULL, DOF_P1, NULL);
+
+    if (inverse_iter > 0)
+        update_viscosity_inversion(ns);
+
+    FLOAT tol = 0.01;
+    INT visc_convergence = check_visc_convergence(ns, visc_old, tol);
+
+
+    if((mask_iter >= 1) && (inverse_iter > 0) && (visc_convergence == 1))
     {
         phgPrintf("\n-------------------------\n");
         phgPrintf("ice shelf mask updated \n");
@@ -844,6 +889,7 @@ main(int argc, char *argv[])
     //phgDofFree(&ns->avg_gu);
 
     mask_iter++;
+    inverse_iter++;
 
     }
 

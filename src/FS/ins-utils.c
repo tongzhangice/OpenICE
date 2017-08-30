@@ -5,6 +5,7 @@
  *
  *  */
 #include "ins.h"
+#include "mat_op3.h"
 
 
 /* Print Macro defination */
@@ -799,4 +800,162 @@ get_surf_bot_elev(NSSolver *ns)
     ns->bot_elev_P1 = bot_elev_P1;
 
     return;
+}
+
+
+void get_strain_rate(NSSolver *ns)
+{
+    GRID *g = ns->g;
+    SIMPLEX *e;
+
+    int i, s, k;
+    INT local_idx;
+    FLOAT *gu, *data;
+
+    DOF *gradu = phgDofCopy(ns->gradu[1], NULL, DOF_P1, "grad u");
+
+    DOF *strain_rate = phgDofNew(g, DOF_P1, DDim, "stress", DofNoAction);
+
+    ForAllElements(g, e)
+    {
+        for (i = 0; i < Dim+1; i++)
+        {
+
+            local_idx = e->verts[i];
+            gu = DofVertexData(gradu, local_idx);
+
+            data = DofVertexData(strain_rate, local_idx);
+
+            data[0] = gu[0];
+            data[4] = gu[4];
+            data[8] = gu[8];
+            data[1] = data[3] = 0.5*(gu[1]+gu[3]);
+            data[2] = data[6] = 0.5*(gu[2]+gu[6]);
+            data[5] = data[7] = 0.5*(gu[5]+gu[7]);
+
+            /*
+            for (k = 0; k < DDim; k++)
+                data[k] = strain_rate[k];
+            */
+        }
+    }
+
+    phgDofCopy(strain_rate, &ns->strain_rate, NULL, NULL);
+    phgExportVTK(g, "strain_rate.vtk", strain_rate, NULL);
+
+    phgDofFree(&strain_rate);
+    phgDofFree(&gradu);
+}
+
+
+void
+get_viscosity(NSSolver *ns)
+{
+    GRID *g = ns->g;
+    SIMPLEX *e;
+
+    int i, s, k;
+    INT local_idx;
+    FLOAT *gu, *data, strain_rate[DDim], eps;
+
+    DOF *gradu = phgDofCopy(ns->gradu[1], NULL, DOF_P1, "grad u");
+
+    DOF *visc = phgDofNew(g, DOF_P1, 1, "viscosity", DofNoAction);
+
+    ForAllElements(g, e)
+    {
+        for (i = 0; i < Dim+1; i++)
+        {
+
+            local_idx = e->verts[i];
+            gu = DofVertexData(gradu, local_idx);
+            MAT3_SYM(gu, strain_rate);
+            eps = sqrt(.5) * MAT3_NORM2(strain_rate);
+
+            if (eps < MIN_EFFECTIVE_STRAIN)
+                eps = MIN_EFFECTIVE_STRAIN;
+
+            data = DofVertexData(visc, local_idx);
+
+            data[0] = pow(A_INIT, -1./POWER_N) * pow(eps, (1.-POWER_N)/POWER_N);
+
+        }
+    }
+
+    phgDofCopy(visc, &ns->viscosity, NULL, NULL);
+    phgExportVTK(g, "viscosity.vtk", visc, NULL);
+
+    phgDofFree(&visc);
+    phgDofFree(&gradu);
+}
+
+
+void
+update_viscosity_inversion(NSSolver *ns)
+{
+    GRID *g = ns->g;
+    SIMPLEX *e;
+
+    int i, s, k;
+    INT local_idx;
+    FLOAT *vis, data[1], strain_rate[DDim], eps;
+    FLOAT *vd, *vn, fvd2, fvn2; 
+
+    FLOAT alpha = 0.1;
+
+    DOF *visc = phgDofCopy(ns->viscosity, NULL, DOF_P1, NULL);
+
+
+    ForAllElements(g, e)
+    {
+        for (i = 0; i < Dim+1; i++)
+        {
+
+            local_idx = e->verts[i];
+            vis = DofVertexData(visc, local_idx);
+            vd = DofVertexData(ns->eu_d, local_idx);
+            vn = DofVertexData(ns->eu_n, local_idx);
+
+            fvd2 = (vd[0]*vd[0] + vd[1]*vd[1] + vd[2]*vd[2]
+                      +vd[3]*vd[3] + vd[4]*vd[4] + vd[5]*vd[5]
+                      +vd[6]*vd[6] + vd[7]*vd[7] + vd[8]*vd[8]);
+            fvn2 = (vn[0]*vn[0] + vn[1]*vn[1] + vn[2]*vn[2]
+                      +vn[3]*vn[3] + vn[4]*vn[4] + vn[5]*vn[5]
+                      +vn[6]*vn[6] + vn[7]*vn[7] + vn[8]*vn[8]);
+
+            *vis = *vis + alpha * (fvd2 - fvn2);
+
+
+        }
+    }
+
+    phgDofCopy(visc, &ns->viscosity, NULL, NULL);
+    phgExportVTK(g, "viscosity.vtk", visc, NULL);
+
+    phgDofFree(&visc);
+}
+
+
+INT check_visc_convergence(NSSolver *ns, DOF *visc_old, FLOAT tol)
+{
+    INT visc_convergence;
+    DOF *pvisc = phgDofCopy(ns->viscosity, NULL, NULL, "plus_dH");
+    DOF *mvisc = phgDofCopy(ns->viscosity, NULL, NULL, "minus_dH");
+    phgDofAXPY(1, visc_old, &pvisc);
+    phgDofAXPY(-1, visc_old, &mvisc);
+    FLOAT relative_error_norm_visc = 2.0*phgDofNormL2(mvisc)/phgDofNormL2(pvisc);
+    phgPrintf("relative_error_norm visc: %f \n", relative_error_norm_visc);
+    phgDofFree(&pvisc);
+    phgDofFree(&mvisc);
+
+    if (relative_error_norm_visc < tol)
+    {
+        visc_convergence = 1;
+    }
+    else
+    {
+        visc_convergence = 0;
+    }
+
+    return visc_convergence;
 }

@@ -101,7 +101,7 @@ phgNSBuildSolverURHS(NSSolver *ns, INT IF_DB, INT nonstep, FLOAT Time)
 	FLOAT vol, area, det;
 	const FLOAT *w, *p, *normal,
 	    **vu, *vu_queue[3],*ice_shelf_pres_value,
-	    *vf[2], *gu[2], *vp[2], *vw, *vTe;
+	    *vf[2], *gu[2], *vp[2], *vw, *vTe, *visc;
 	FLOAT *vf_cache[2];
 	FLOAT vp0 = 0.;
 
@@ -130,6 +130,8 @@ phgNSBuildSolverURHS(NSSolver *ns, INT IF_DB, INT nonstep, FLOAT Time)
 #else
 	TIME_DEP_LINEAR_ENTRY; /* Unavailable */
 #endif /* STEADY_STATE || TIME_DEP_NON */
+
+    visc = phgQuadGetDofValues(e, ns->viscosity, quad);
 
 	Unused(l);
 	Bzero(vf); Bzero(vf_cache); 
@@ -175,6 +177,7 @@ phgNSBuildSolverURHS(NSSolver *ns, INT IF_DB, INT nonstep, FLOAT Time)
 
 		for (k = 0; k < Dim; k++) {
 		    nu = get_effective_viscosity(gu[1], *vTe, 0, viscosity_type);
+            nu = *visc;
 		    FLOAT eu[DDim];
 
 		    MAT3_SYM(gu[1], eu);
@@ -856,7 +859,7 @@ phgNSBuildSolverUMat(NSSolver *ns, INT IF_DB, INT nonstep, FLOAT Time)
 	INT Iu[M][Dim], Iu1[M], Ju[Dim][M], Ip[N];
 	QUAD *quad;
 	FLOAT vol, det;
-	const FLOAT *w, *p, *vw, *gu, *vTe;
+	const FLOAT *w, *p, *vw, *gu, *vTe, *visc;
 
 	Unused(Iu1);
 	for (i = 0; i < M; i++)
@@ -872,6 +875,9 @@ phgNSBuildSolverUMat(NSSolver *ns, INT IF_DB, INT nonstep, FLOAT Time)
 	quad = phgQuadGetQuad3D(order);
 	//vw = phgQuadGetDofValues(e, ns->wind, quad);      /* value wind */
 	gu = phgQuadGetDofValues(e, ns->gradu[1], quad);  /* grad u */
+
+    visc = phgQuadGetDofValues(e, ns->viscosity, quad);
+
 	if (ns_params->noniter_temp)
 	    vTe = phgQuadGetDofValues(e, ns->T[1], quad);	  /* T^{n+1} */
 	else
@@ -899,6 +905,8 @@ phgNSBuildSolverUMat(NSSolver *ns, INT IF_DB, INT nonstep, FLOAT Time)
 
 		    Unused(mass);
 		    nu = get_effective_viscosity(gu, *vTe, 0, viscosity_type);
+
+            nu = *visc;
 
 		    const FLOAT *tp = get_gbas_product(ggi_u, ggj_u, gu, ltype);
 
@@ -955,6 +963,7 @@ phgNSBuildSolverUMat(NSSolver *ns, INT IF_DB, INT nonstep, FLOAT Time)
 	    /* Next quad point */
 	    //vw += Dim;
 	    gu += Dim*Dim;
+        visc++;
 	    vTe++;
 	    w++; p += Dim+1;
 	}

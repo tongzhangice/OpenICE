@@ -454,6 +454,11 @@ typedef struct NSSolver_ {
     DOF *stress_nn1;
     DOF *mask_bot;
     DOF *avg_gu;
+    DOF *viscosity;
+    DOF *strain_rate;
+    DOF *eu_d;
+    DOF *eu_n;
+        
     DOF *f;			  /* source term momentum  */
     DOF *u_queue[3];		  /* velocity at different time */
     DOF *p_queue[3];		  /* pressure at different time */
@@ -525,6 +530,7 @@ typedef struct NSSolver_ {
     FLOAT dt_queue[2];		  /* time step at different time */
     INT tstep;			  /* current time step */
     int viscosity_type;	          /* Viscosity types: const, T-indep, T-dep, ... */
+    int set_dirichlet_bc; /* the surface bc for the inversion */
     LTYPE ltype;	          /* Picard or Newton */
     SURF_BAS *surf_bas;
 
@@ -1010,3 +1016,6 @@ void save_free_surface_velo(NSSolver *ns, int which_dim, int up_or_lower);
 void save_free_surface_elev(NSSolver *ns, int up_or_lower);
 void modify_mask_bot(NSSolver *ns);
 void get_surf_bot_elev(NSSolver *ns);
+void get_viscosity(NSSolver *ns);
+void update_viscosity_inversion(NSSolver *ns);
+INT check_visc_convergence(NSSolver *ns, DOF *visc_old, FLOAT tol);

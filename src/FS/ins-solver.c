@@ -281,7 +281,12 @@ phgNSCreate(GRID *g, NSParams *ns_params0)
     /* Set initial values only at boundary.
      * For enclosed flow, pinned node has not been decided,
      *   so it is useless to set pinned node value here. */
-    phgDofSetBdryDataByFunction(u[1], func_u, BC_LATERL);
+    if (ns->set_dirichlet_bc)
+        phgDofSetBdryDataByFunction(u[1], func_u, BC_LATERL|BC_TOP);
+    else
+        phgDofSetBdryDataByFunction(u[1], func_u, BC_LATERL);
+
+    
 #else
     /* Set initial values in whole domain */
     phgDofSetDataByFunction(u[1], func_u);

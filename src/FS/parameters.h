@@ -191,6 +191,8 @@
 #  define        MIN_EFFECTIVE_STRAIN   1e-15	/* Effective strian minimum */
 #  define        HEAT_SOURCE            0       /* Volume heat soruce */
 
+#  define    A_INIT             1e-16 
+
 /*	 Paterson & budd (1982) */
 #  define	 ARRHENIUS_T	263.15
 #  define	 ARRHENIUS_A0   3.61E-13     
